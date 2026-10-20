@@ -6,6 +6,7 @@ import { logger } from './utils/logger';
 import { horizonRouter } from './routes/horizon';
 import { enhancedRouter } from './routes/enhanced';
 import { arcRouter } from './routes/arc';
+import { metricsHandler, metricsMiddleware } from './services/metrics';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -19,6 +20,8 @@ const limiter = rateLimit({
   max: config.rateLimit.maxRequests,
   standardHeaders: true,
   legacyHeaders: false,
+  // Prometheus scrapes must not consume client quota.
+  skip: (req) => req.path === '/metrics',
   message: { error: 'Too many requests, please try again later' },
 });
 app.use(limiter);
@@ -31,6 +34,9 @@ app.use((req, _res, next) => {
   logger.debug(`${req.method} ${req.path}`);
   next();
 });
+
+// Prometheus request metrics
+app.use(metricsMiddleware);
 
 // Enhanced API routes (cached)
 app.use('/api/v1', enhancedRouter);
@@ -45,8 +51,8 @@ app.use('/horizon', horizonRouter);
 app.get('/', (_req, res) => {
   res.json({
     name: 'Suban API',
-    version: '1.0.0',
-    description: 'Horizon API wrapper for Pi Network with caching and rate limiting',
+    version: '1.1.0',
+    description: 'Horizon API wrapper for Pi Network with caching, rate limiting and metrics',
     platform: 'https://suban.org',
     endpoints: {
       summary: '/api/v1/summary',
@@ -59,6 +65,7 @@ app.get('/', (_req, res) => {
       arcBlockNumber: '/arc/block-number',
       arcRpc: '/arc/rpc',
       horizon: '/horizon/*',
+      metrics: '/metrics',
     },
   });
 });
@@ -67,6 +74,9 @@ app.get('/', (_req, res) => {
 app.get('/health', (_req, res) => {
   res.json({ status: 'healthy', service: 'suban-api', timestamp: new Date().toISOString() });
 });
+
+// Prometheus metrics
+app.get('/metrics', metricsHandler);
 
 // 404
 app.use((_req, res) => {

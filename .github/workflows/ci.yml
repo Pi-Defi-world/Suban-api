@@ -19,6 +19,11 @@ jobs:
         with:
           node-version: 22
       - run: npm ci --no-audit --no-fund
+      - name: Dependency audit (production, blocking)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Dependency audit (all, report only)
+        continue-on-error: true
+        run: npm audit --audit-level=moderate
       - run: npm run build
 
   secrets:
